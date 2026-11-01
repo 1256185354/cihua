@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#f4f1ea" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="词话" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="description" content="把你每天遇到的生词收进来，背、跟读、再复习。" />
+<title>词话 · 背单词 练口语</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="boot-error" id="bootError" hidden>
+  <span>脚本没加载成功，可能是网络不稳。</span>
+  <button type="button" onclick="location.reload()">重新加载</button>
+</div>
+
+<div class="app">
+
+  <!-- ==================== 今日 ==================== -->
+  <section class="view" id="view-today">
+    <header class="hero">
+      <div class="hero-top">
+        <p class="eyebrow" id="todayLabel">今天</p>
+        <div class="streak" title="连续学习天数">
+          <span aria-hidden="true">🔥</span><b id="streakNum">0</b><small>天</small>
+        </div>
+      </div>
+
+      <h1 class="hero-title">今天，<br />说几个词？</h1>
+
+      <div class="stats-strip">
+        <div class="stat">
+          <b id="statNew">0</b>
+          <span>待学新词</span>
+        </div>
+        <div class="stat">
+          <b id="statDue">0</b>
+          <span>待复习</span>
+        </div>
+        <div class="stat">
+          <b id="statDone">0</b>
+          <span>今日已练</span>
+        </div>
+      </div>
+
+      <button class="start-btn" id="btnStart">
+        <span id="startLabel">开始学习</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+      </button>
+      <div class="day-progress"><i id="dayProgress"></i></div>
+      <p class="hint" id="taskHint">正在准备…</p>
+      <div class="alt-modes">
+        <button class="alt-btn" id="btnDictate">✍️ 听写</button>
+        <button class="alt-btn" id="btnSpeak">🗣️ 口语</button>
+        <button class="alt-btn" id="btnCloze">🎧 精听</button>
+      </div>
+      <p class="insecure-note" id="insecureNote" hidden>http 地址下录音和评测不可用（需要 https）</p>
+    </header>
+
+    <div class="tip-card" id="tipCard">
+      <p class="tip-title" id="tipTitle">跟读小贴士</p>
+      <p class="tip-body" id="tipBody">听一遍原音 → 跟着读 3 遍 → 录下来自己听。开口一次，比默看十次记得牢。</p>
+      <button class="mini-btn" id="tipAction" hidden>知道了</button>
+    </div>
+
+    <div class="section-head">
+      <h2>最近添加</h2>
+      <button class="link-btn" id="btnQuickAdd">＋ 加个生词</button>
+    </div>
+    <ul class="word-list" id="recentList"></ul>
+  </section>
+
+  <!-- ==================== 词库 ==================== -->
+  <section class="view" id="view-library" hidden>
+    <header class="page-head">
+      <h1>我的词库</h1>
+      <p id="libCount">共 0 个词</p>
+    </header>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+      <input id="searchInput" type="search" placeholder="搜索单词、音标或释义" autocomplete="off" />
+    </div>
+
+    <div class="chips" id="libFilters">
+      <button class="chip is-active" data-filter="all">全部</button>
+      <button class="chip" data-filter="due">待复习</button>
+      <button class="chip" data-filter="new">未学</button>
+      <button class="chip" data-filter="mastered">已掌握</button>
+    </div>
+    <div class="chips tags-row" id="libTags" hidden></div>
+
+    <ul class="word-list" id="libList"></ul>
+    <div class="empty" id="libEmpty" hidden>
+      <p class="empty-emoji">🗂️</p>
+      <p>这里还没有词。<br />把今天遇到的生词加进来吧。</p>
+      <button class="ghost-btn" id="btnEmptyAdd">添加生词</button>
+    </div>
+  </section>
+
+  <!-- ==================== 我的 ==================== -->
+  <section class="view" id="view-me" hidden>
+    <header class="page-head">
+      <h1>我的</h1>
+      <p>数据只存在这台设备上</p>
+    </header>
+
+    <div class="install-card" id="installCard" hidden>
+      <div class="install-text">
+        <p class="install-title">把它装到主屏</p>
+        <p class="install-sub" id="installSub">全屏打开，离线也能用</p>
+      </div>
+      <button class="mini-btn" id="btnInstall">安装</button>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric"><b id="mTotal">0</b><span>总词数</span></div>
+      <div class="metric"><b id="mMastered">0</b><span>已掌握</span></div>
+      <div class="metric"><b id="mStreak">0</b><span>连续天数</span></div>
+      <div class="metric"><b id="mWeek">0</b><span>近 7 天练习</span></div>
+    </div>
+
+    <div class="group">
+      <h2>接下来 7 天</h2>
+      <div class="due-chart" id="dueChart"></div>
+      <p class="row-note" id="dueNote">每天要复习多少词</p>
+    </div>
+
+    <div class="group">
+      <h2>最近 30 天</h2>
+      <div class="heatmap" id="heatmap"></div>
+      <p class="row-note" id="heatmapNote">颜色越深，当天练得越多</p>
+    </div>
+
+    <div class="group">
+      <h2>学习设置</h2>
+
+      <label class="row">
+        <span class="row-label">每日新词上限</span>
+        <span class="row-ctrl">
+          <input id="setDailyNew" type="number" min="0" max="100" step="1" inputmode="numeric" />
+        </span>
+      </label>
+
+      <label class="row">
+        <span class="row-label">卡片出现时自动朗读</span>
+        <span class="row-ctrl">
+          <input id="setAutoSpeak" type="checkbox" class="switch" />
+        </span>
+      </label>
+
+      <label class="row">
+        <span class="row-label">朗读语速</span>
+        <span class="row-ctrl"><input id="setRate" type="range" min="0.5" max="1.2" step="0.05" /></span>
+      </label>
+
+      <label class="row">
+        <span class="row-label">发音口音</span>
+        <span class="row-ctrl">
+          <select id="setVoice"></select>
+        </span>
+      </label>
+    </div>
+
+    <div class="group">
+      <h2>每日提醒</h2>
+      <label class="row">
+        <span class="row-label">到点提醒我复习</span>
+        <span class="row-ctrl">
+          <input id="setReminder" type="checkbox" class="switch" />
+        </span>
+      </label>
+      <label class="row">
+        <span class="row-label">提醒时间</span>
+        <span class="row-ctrl">
+          <input id="setReminderTime" type="time" value="20:00" />
+        </span>
+      </label>
+      <div class="row">
+        <span class="row-label" id="notifyStatus">通知权限：未开启</span>
+        <button class="mini-btn" id="btnNotifyPerm">允许通知</button>
+      </div>
+      <p class="row-note">网页版只能在这个页面开着（或装到主屏）时提醒你，真正的定时推送需要后端支持。</p>
+    </div>
+
+    <div class="group">
+      <h2>云同步（可选）</h2>
+      <div class="row">
+        <span class="row-label" id="syncStatus">未连接</span>
+        <span class="row-ctrl">
+          <button class="mini-btn" id="btnSyncNow">立即同步</button>
+        </span>
+      </div>
+      <label class="row col">
+        <span class="row-label">Supabase 项目地址</span>
+        <input id="syncUrl" placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="row col">
+        <span class="row-label">Anon Key</span>
+        <input id="syncKey" placeholder="eyJhbGciOi…" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="row col">
+        <span class="row-label">同步 ID（两台设备填一样）</span>
+        <input id="syncId" placeholder="点「生成」得到一串随机 ID" autocomplete="off" spellcheck="false" />
+        <button class="mini-btn self-start" id="btnSyncIdGen" type="button">生成</button>
+      </label>
+      <button class="row as-btn" id="btnSyncSave">
+        <span class="row-label">保存并同步</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <p class="row-note">
+        数据存在你自己的 Supabase 项目里，不经过任何第三方服务器。建表 SQL 见 README。
+        同步 ID 相当于密码，别用邮箱之类好猜的字符串。
+      </p>
+    </div>
+
+    <div class="group">
+      <h2>数据</h2>
+      <button class="row as-btn" id="btnExport">
+        <span class="row-label">导出备份（JSON）</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <button class="row as-btn" id="btnExportCsv">
+        <span class="row-label">导出 CSV 表格</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <button class="row as-btn" id="btnExportAnki">
+        <span class="row-label">导出 Anki 卡片</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <button class="row as-btn" id="btnImport">
+        <span class="row-label">从备份导入</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <button class="row as-btn" id="btnSeed">
+        <span class="row-label">补充一批常用词</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <button class="row as-btn danger" id="btnReset">
+        <span class="row-label">清空所有数据</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <input id="fileImport" type="file" accept="application/json,.json" hidden />
+      <p class="row-note" id="backupNote">还没备份过</p>
+    </div>
+
+    <p class="foot">词话 v1.0 · 一个只做「背单词 + 练口语」的小应用<br />建议在手机浏览器里「添加到主屏幕」使用</p>
+  </section>
+
+  <!-- ==================== 底部导航 ==================== -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab is-active" data-tab="today">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" /></svg>
+      <span>今日</span>
+    </button>
+    <button class="tab" data-tab="library">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4z" /><path d="M9 8h6M9 12h4" /></svg>
+      <span>词库</span>
+    </button>
+    <button class="tab" data-tab="me">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" /></svg>
+      <span>我的</span>
+    </button>
+  </nav>
+</div>
+
+<button class="fab" id="btnLibAdd" aria-label="添加生词" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+</button>
+
+<!-- ==================== 学习全屏 ==================== -->
+<div class="study" id="study" hidden>
+  <div class="study-top">
+    <button class="icon-btn" id="btnCloseStudy" aria-label="退出学习">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+    <div class="progress"><i id="progressFill"></i></div>
+    <span class="progress-num" id="progressNum">0/0</span>
+  </div>
+  <div class="study-body" id="studyBody"></div>
+  <div class="grade-bar" id="gradeBar" hidden>
+    <button class="grade" data-grade="0"><b>忘记</b><span data-preview="0">10 分钟后</span></button>
+    <button class="grade" data-grade="1"><b>模糊</b><span data-preview="1">—</span></button>
+    <button class="grade" data-grade="2"><b>记住</b><span data-preview="2">—</span></button>
+  </div>
+  <div class="speak-bar" id="speakBar" hidden>
+    <button class="primary-btn" id="btnSpeakNext">下一个 →</button>
+  </div>
+</div>
+
+<!-- ==================== 添加生词 ==================== -->
+<div class="sheet-mask" id="addModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <h2 id="addTitle">添加生词</h2>
+      <button class="icon-btn" id="btnAddClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+
+    <div class="seg" id="addSeg">
+      <button class="is-active" data-mode="one">单个</button>
+      <button data-mode="many">批量粘贴</button>
+    </div>
+
+    <form id="formOne" class="form" autocomplete="off">
+      <label class="field">
+        <span>单词 <i>*</i></span>
+        <div class="input-row">
+          <input id="fTerm" name="term" placeholder="abundant" required />
+          <button type="button" class="lookup-btn" id="btnLookup">查词</button>
+        </div>      </label>
+      <p class="lookup-status" id="lookupStatus" hidden></p>
+      <div class="field-row">
+        <label class="field">
+          <span>音标</span>
+          <input id="fPhon" name="phonetic" placeholder="/əˈbʌndənt/" />
+        </label>
+        <label class="field">
+          <span>词性</span>
+          <input id="fPos" name="pos" placeholder="adj." />
+        </label>
+      </div>
+      <label class="field">
+        <span>中文释义 <i>*</i></span>
+        <input id="fMeaning" name="meaning" placeholder="大量的；丰富的" required />
+      </label>
+      <label class="field">
+        <span>英文释义（可选）</span>
+        <input id="fDefinition" name="definition" placeholder="existing in large numbers" />
+      </label>
+      <label class="field">
+        <span>标签（可选，空格分隔）</span>
+        <input id="fTags" name="tags" placeholder="口语 旅游 商务" />
+      </label>
+      <label class="field">
+        <span>例句（可选）</span>
+        <input id="fExample" name="example" placeholder="The region has abundant natural resources." />
+      </label>
+      <label class="field">
+        <span>例句翻译（可选）</span>
+        <input id="fExampleZh" name="exampleZh" placeholder="这个地区自然资源丰富。" />
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary-btn">保存并继续</button>
+        <button type="button" class="ghost-btn" id="btnSaveDone">保存后关闭</button>
+      </div>
+    </form>
+
+    <form id="formMany" class="form" hidden autocomplete="off">
+      <label class="field">
+        <span>每行一个词，用 <code>|</code> 分隔字段</span>
+        <textarea id="fLines" rows="7" placeholder="abundant | /əˈbʌndənt/ | adj. 大量的 | The region has abundant resources.
+compromise | /ˈkɒmprəmaɪz/ | n. 妥协；折中
+threshold | 门槛；临界点"></textarea>
+      </label>
+      <p class="form-note">顺序：单词 | 音标 | 释义 | 例句（音标、例句可省略）。也支持「单词 释义」两栏，用空格或 Tab 隔开。</p>
+      <label class="field">
+        <span>给这批词加标签（可选）</span>
+        <input id="fBatchTags" placeholder="第六单元 精读" />
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary-btn">批量添加</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+<script>
+  // 兜底：app.js 没跑起来（网络断了 / 缓存服务挂了）时给一个明确出口
+  window.__cihuaBooted = false;
+  setTimeout(function () {
+    if (window.__cihuaBooted) return;
+    var el = document.getElementById('bootError');
+    if (el) el.hidden = false;
+  }, 4000);
+</script>
+</body>
+</html>
