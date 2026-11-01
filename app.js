@@ -2361,7 +2361,4 @@
   }
 
   window.__cihuaBooted = true;
-  // 启动成功就把「加载失败」兜底条收掉（弱网时它可能已经先弹出来了）
-  const bootErr = document.getElementById('bootError');
-  if (bootErr) bootErr.hidden = true;
 })();

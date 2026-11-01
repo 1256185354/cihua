@@ -16,11 +16,6 @@
 </head>
 <body>
 
-<div class="boot-error" id="bootError" hidden>
-  <span>脚本没加载成功，可能是网络不稳。</span>
-  <button type="button" onclick="location.reload()">重新加载</button>
-</div>
-
 <div class="app">
 
   <!-- ==================== 今日 ==================== -->
@@ -377,14 +372,5 @@ threshold | 门槛；临界点"></textarea>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
-<script>
-  // 兜底：app.js 没跑起来（网络断了 / 缓存服务挂了）时给一个明确出口
-  window.__cihuaBooted = false;
-  setTimeout(function () {
-    if (window.__cihuaBooted) return;
-    var el = document.getElementById('bootError');
-    if (el) el.hidden = false;
-  }, 10000);
-</script>
 </body>
 </html>
