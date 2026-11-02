@@ -2024,6 +2024,81 @@ svg { display: block; }
   color: #8a7a5a;
 }
 
+.bubble-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bubble .tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border: 1px solid #d5e2d9;
+  font-size: 12px;
+}
+
+.bubble .tool-btn.tr {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bubble .tool-btn.tr.is-on {
+  background: var(--accent);
+  color: #fdfcf7;
+  border-color: var(--accent);
+}
+
+.bubble .tool-btn:disabled { opacity: .5; }
+
+.bubble .tool-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bubble-zh {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e6dcc6;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.bubble .replay {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 8px;
+  border-radius: 50%;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border: 1px solid #d5e2d9;
+}
+
+.bubble .replay svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .bubble.err {
   align-self: center;
   max-width: 90%;

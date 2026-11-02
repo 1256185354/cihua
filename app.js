@@ -3007,6 +3007,28 @@
     return (msg && msg.content ? String(msg.content) : '').trim();
   }
 
+  async function translateAI(text) {
+    const payload = [
+      {
+        role: 'system',
+        content:
+          'You are a translator for a Chinese learner of English. Translate the user text into natural, concise Chinese. Output only the translation, no quotes, no explanations.',
+      },
+      { role: 'user', content: text },
+    ];
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI.key}` },
+      body: JSON.stringify({ model: 'deepseek-chat', messages: payload, temperature: 0.3, max_tokens: 300 }),
+    });
+    if (!res.ok) throw new Error(res.status === 401 ? 'Key 不对' : `状态 ${res.status}`);
+    const data = await res.json();
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+    const out = (msg && msg.content ? String(msg.content) : '').trim();
+    if (!out) throw new Error('没有返回内容');
+    return out;
+  }
+
   function renderChat() {
     const box = $('#chatBody');
     if (!box) return;
@@ -3017,7 +3039,7 @@
       const tip = document.createElement('div');
       tip.className = 'chat-empty';
       tip.innerHTML = AI.key
-        ? `<p class="ce-title">${esc(scene.name)}</p><p class="ce-hint">${esc(scene.hint)}</p>`
+        ? `<p class="ce-title">${esc(scene.name)}</p><p class="ce-hint">${esc(scene.hint)}</p><p class="ce-hint">回复会自动朗读；听不懂就点气泡里的「译」</p>`
         : `<p class="ce-title">还没填 API Key</p><p class="ce-hint">去「我的 → 口语搭子」填一个就能开始聊</p>`;
       box.appendChild(tip);
     }
@@ -3025,17 +3047,63 @@
     chat.messages.forEach((m) => {
       const div = document.createElement('div');
       div.className = 'bubble ' + (m.role === 'user' ? 'me' : m.role === 'error' ? 'err' : 'ai');
+
       if (m.role === 'assistant') {
         const at = m.content.search(/Tip:/i);
+        const main = at >= 0 ? m.content.slice(0, at).trim() : m.content;
+        div.textContent = main;
         if (at >= 0) {
-          div.textContent = m.content.slice(0, at).trim();
           const tip = document.createElement('span');
           tip.className = 'tip-line';
           tip.textContent = 'Tip: ' + m.content.slice(at).replace(/^Tip:\s*/i, '').trim();
           div.appendChild(tip);
-        } else {
-          div.textContent = m.content;
         }
+        if (m.zhShown && m.zh) {
+          const zh = document.createElement('div');
+          zh.className = 'bubble-zh';
+          zh.textContent = m.zh;
+          div.appendChild(zh);
+        }
+
+        const tools = document.createElement('div');
+        tools.className = 'bubble-tools';
+
+        const say = document.createElement('button');
+        say.type = 'button';
+        say.className = 'tool-btn';
+        say.setAttribute('aria-label', '朗读这句');
+        say.innerHTML = ICON.speaker;
+        say.addEventListener('click', () => speak(main || m.content, { rate: 0.95 }));
+        tools.appendChild(say);
+
+        const tr = document.createElement('button');
+        tr.type = 'button';
+        tr.className = 'tool-btn tr' + (m.zhShown ? ' is-on' : '');
+        tr.textContent = '译';
+        tr.setAttribute('aria-label', '翻译成中文');
+        tr.addEventListener('click', async () => {
+          if (m.zh) {
+            m.zhShown = !m.zhShown;
+            renderChat();
+            return;
+          }
+          if (!AI.key) {
+            toast('先在「我的 → 口语搭子」填 API Key');
+            return;
+          }
+          tr.textContent = '…';
+          tr.disabled = true;
+          try {
+            m.zh = await translateAI(m.content);
+            m.zhShown = true;
+          } catch (err) {
+            toast('翻译失败：' + (err.message || '网络问题'));
+          }
+          renderChat();
+        });
+        tools.appendChild(tr);
+
+        div.appendChild(tools);
       } else {
         div.textContent = m.content;
       }
@@ -3149,6 +3217,10 @@
   /* ---------------------------------------------------------
      启动
      --------------------------------------------------------- */
+  const BUILD = 'v1.3 · 11.02';
+  const tag = $('#buildTag');
+  if (tag) tag.textContent = BUILD;
+
   load();
   loadSync();
   loadAi();
