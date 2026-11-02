@@ -2460,6 +2460,7 @@
       if (!b) return;
       $$('#sentSeg button').forEach((x) => x.classList.toggle('is-active', x === b));
       $('#sentFormPaste').hidden = b.dataset.mode !== 'paste';
+      $('#sentZh').hidden = b.dataset.mode !== 'zh';
       $('#sentPhoto').hidden = b.dataset.mode !== 'photo';
     });
     $('#sentFormPaste').addEventListener('submit', (e) => {
@@ -2469,9 +2470,45 @@
         toast('先粘几句进来');
         return;
       }
-      const n = addSentences(lines);
-      toast(n ? `已加入 ${n} 句` : '这些句子已经在库里了');
-      if (n) closeSentModal();
+      const added = addSentences(lines);
+      toast(added.length ? `已加入 ${added.length} 句` : '这些句子已经在库里了');
+      if (added.length) closeSentModal();
+    });
+    $('#btnZhTranslate').addEventListener('click', async () => {
+      const zhLines = splitLines($('#sentZhText').value);
+      const status = $('#zhStatus');
+      if (!zhLines.length) {
+        toast('先写一句中文');
+        return;
+      }
+      if (!AI.key) {
+        status.textContent = '需要先在「我的 → 口语搭子」填 DeepSeek API Key';
+        return;
+      }
+      const btn = $('#btnZhTranslate');
+      btn.disabled = true;
+      btn.textContent = '翻译中…';
+      try {
+        const en = await translateToEnglish(zhLines);
+        if (!en.length) throw new Error('没有译文');
+        const added = addSentences(en, '中译英', zhLines);
+        btn.disabled = false;
+        btn.textContent = '翻译并跟读';
+        if (!added.length) {
+          toast('这些句子已经在库里了');
+          return;
+        }
+        $('#sentZhText').value = '';
+        status.textContent = '翻成地道口语后自动加进句子库，并直接进入跟读。';
+        closeSentModal();
+        switchTab('sentences');
+        toast(`已加入 ${added.length} 句，开始跟读`);
+        setTimeout(() => openSentPractice(added[0].id), 260);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '翻译并跟读';
+        status.textContent = `翻译失败：${err.message || '网络问题'}`;
+      }
     });
     $('#btnPickPhoto').addEventListener('click', () => $('#sentPhotoInput').click());
     $('#sentPhotoInput').addEventListener('change', async (e) => {
@@ -2490,9 +2527,9 @@
         toast('还没有识别结果');
         return;
       }
-      const n = addSentences(lines, '拍照');
-      toast(n ? `已加入 ${n} 句` : '这些句子已经在库里了');
-      if (n) closeSentModal();
+      const added = addSentences(lines, '拍照');
+      toast(added.length ? `已加入 ${added.length} 句` : '这些句子已经在库里了');
+      if (added.length) closeSentModal();
     });
 
     // 键盘：学习时按 1/2/3 评分
@@ -2526,25 +2563,26 @@
       .slice(0, 50);
   }
 
-  function addSentences(lines, source) {
+  function addSentences(lines, source, zhList) {
     const exist = new Set(sentences().map((s) => s.text.toLowerCase()));
-    let added = 0;
-    lines.forEach((text) => {
-      const key = text.toLowerCase();
-      if (exist.has(key)) return;
+    const added = [];
+    lines.forEach((text, i) => {
+      const key = String(text).toLowerCase();
+      if (!text || exist.has(key)) return;
       exist.add(key);
-      DATA.sentences.push({
+      const item = {
         id: uid(),
         text,
-        zh: '',
+        zh: (zhList && zhList[i]) || '',
         source: source || '',
         fav: false,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-      });
-      added++;
+      };
+      DATA.sentences.push(item);
+      added.push(item);
     });
-    if (added) {
+    if (added.length) {
       save();
       renderSentences();
     }
@@ -2886,6 +2924,14 @@
     document.body.classList.add('lock');
     $('#sentText').value = '';
     $('#sentOcrText').value = '';
+    $('#sentZhText').value = '';
+    $$('#sentSeg button').forEach((x) => x.classList.toggle('is-active', x.dataset.mode === 'paste'));
+    const paste = $('#sentFormPaste');
+    const zh = $('#sentZh');
+    const photo = $('#sentPhoto');
+    if (paste) paste.hidden = false;
+    if (zh) zh.hidden = true;
+    if (photo) photo.hidden = true;
     setOcrStatus('选一张带英文的照片，识别后可修改再保存。');
   }
 
@@ -3149,6 +3195,33 @@
     return out;
   }
 
+  async function translateToEnglish(zhLines) {
+    const payload = [
+      {
+        role: 'system',
+        content:
+          'You translate Chinese into natural, everyday spoken English. Output exactly one English line per input line, in the same order. No numbering, no quotes, no explanations.',
+      },
+      { role: 'user', content: zhLines.join('\n') },
+    ];
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI.key}` },
+      body: JSON.stringify({ model: 'deepseek-chat', messages: payload, temperature: 0.4, max_tokens: 500 }),
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('API Key 不对，去「我的 → 口语搭子」检查');
+      throw new Error(`状态 ${res.status}`);
+    }
+    const data = await res.json();
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+    const out = (msg && msg.content ? String(msg.content) : '').trim();
+    return out
+      .split(/\r?\n/)
+      .map((s) => s.replace(/^\s*\d+[.、)]\s*/, '').replace(/^["“]|["”]$/g, '').trim())
+      .filter(Boolean);
+  }
+
   function renderChat() {
     const box = $('#chatBody');
     if (!box) return;
@@ -3344,7 +3417,7 @@
   /* ---------------------------------------------------------
      启动
      --------------------------------------------------------- */
-  const BUILD = 'v1.4 · 11.02';
+  const BUILD = 'v1.5 · 11.02';
   const tag = $('#buildTag');
   if (tag) tag.textContent = BUILD;
 

@@ -420,7 +420,19 @@
 
     <div class="seg" id="sentSeg">
       <button class="is-active" data-mode="paste">粘贴</button>
-      <button data-mode="photo">拍照识别</button>
+      <button data-mode="zh">中译英</button>
+      <button data-mode="photo">拍照</button>
+    </div>
+
+    <div id="sentZh" class="form" hidden>
+      <label class="field">
+        <span>中文句子，一行一句</span>
+        <textarea id="sentZhText" rows="5" placeholder="我想订一个明天的房间。"></textarea>
+      </label>
+      <p class="form-note" id="zhStatus">翻成地道口语后自动加进句子库，并直接进入跟读。</p>
+      <div class="form-actions">
+        <button type="button" class="primary-btn" id="btnZhTranslate">翻译并跟读</button>
+      </div>
     </div>
 
     <form id="sentFormPaste" class="form">
