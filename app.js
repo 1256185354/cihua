@@ -1946,6 +1946,8 @@
     (remote.sentences || []).forEach(addSent);
     const sentSeen = new Set();
     const sentences = Array.from(sentById.values()).filter((s) => {
+      const at = tomb.get(s.id);
+      if (at && at > (Number(s.updatedAt) || 0)) return false;
       const t = String(s.text || '').toLowerCase().trim();
       if (t) {
         if (sentSeen.has(t)) return false;
@@ -2374,6 +2376,16 @@
         save();
         renderSentences();
       }
+      if (btn.dataset.act === 'del') {
+        if (!confirm(`删除这句话？\n\n${s.text}`)) return;
+        DATA.sentences = sentences().filter((x) => x.id !== s.id);
+        DATA.deleted = DATA.deleted || [];
+        DATA.deleted.push({ id: s.id, at: Date.now() });
+        if (DATA.deleted.length > 500) DATA.deleted = DATA.deleted.slice(-500);
+        save();
+        renderSentences();
+        toast('已删除');
+      }
     });
 
     $('#sentFilters').addEventListener('click', (e) => {
@@ -2518,6 +2530,7 @@
           <button class="wi-btn ${s.fav ? 'saved' : ''}" data-act="fav" aria-label="收藏">${
           s.fav ? ICON.starOn : ICON.star
         }</button>
+          <button class="wi-btn del" data-act="del" aria-label="删除">${ICON.trash}</button>
         </li>`
       )
       .join('');
