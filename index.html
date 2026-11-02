@@ -56,6 +56,15 @@
         <button class="alt-btn" id="btnSpeak">🗣️ 口语</button>
         <button class="alt-btn" id="btnCloze">🎧 精听</button>
       </div>
+
+      <button class="ai-entry" id="btnAiChat">
+        <span class="ai-emoji">💬</span>
+        <span class="ai-text">
+          <b>口语搭子</b>
+          <small>和 AI 用英语聊两句，它会纠正你</small>
+        </span>
+        <span class="ai-arrow">›</span>
+      </button>
       <p class="insecure-note" id="insecureNote" hidden>http 地址下录音和评测不可用（需要 https）</p>
     </header>
 
@@ -183,6 +192,21 @@
         <button class="mini-btn" id="btnNotifyPerm">允许通知</button>
       </div>
       <p class="row-note">网页版只能在这个页面开着（或装到主屏）时提醒你，真正的定时推送需要后端支持。</p>
+    </div>
+
+    <div class="group">
+      <h2>口语搭子</h2>
+      <label class="row col">
+        <span class="row-label">DeepSeek API Key</span>
+        <input id="aiKey" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+      </label>
+      <button class="row as-btn" id="btnAiSave">
+        <span class="row-label">保存 Key</span>
+        <span class="row-arrow">›</span>
+      </button>
+      <p class="row-note" id="aiNote">
+        Key 只存在这台设备的浏览器里，不会上传到任何地方。到 platform.deepseek.com 注册后创建，费用按用量算，一次对话约一两分钱。
+      </p>
     </div>
 
     <div class="group">
@@ -347,6 +371,40 @@
     <span class="progress-num" id="vidTime">0:00</span>
   </div>
   <div class="study-body" id="videoBody"></div>
+</div>
+
+<!-- ==================== 口语搭子 ==================== -->
+<div class="study" id="chatStudy" hidden>
+  <div class="study-top">
+    <button class="icon-btn" id="btnChatClose" aria-label="退出">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+    <button class="chat-scene" id="btnChatScene">自由聊 ⌄</button>
+    <button class="icon-btn" id="btnChatClear" aria-label="清空对话">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16" /><path d="M9.5 7V4.8h5V7" /><path d="M6.5 7l.9 12.2h9.2L17.5 7" /></svg>
+    </button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-bar">
+    <button class="icon-btn" id="btnChatMic" aria-label="语音输入">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0" /><path d="M12 17.5V21" /></svg>
+    </button>
+    <input id="chatInput" placeholder="用英语说点什么…" autocomplete="off" autocapitalize="sentences" />
+    <button class="chat-send" id="btnChatSend">发送</button>
+  </div>
+</div>
+
+<div class="sheet-mask" id="sceneModal" hidden>
+  <div class="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <h2>选个场景</h2>
+      <button class="icon-btn" id="btnSceneClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="scene-list" id="sceneList"></div>
+  </div>
 </div>
 
 <!-- ==================== 添加句子 ==================== -->

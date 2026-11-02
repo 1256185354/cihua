@@ -434,6 +434,7 @@
     renderBackupNote();
     renderInstall();
     renderSyncForm();
+    renderAiSettings();
   }
 
   function renderDueChart() {
@@ -2358,6 +2359,51 @@
       location.reload();
     });
 
+    // 口语搭子
+    $('#btnAiChat').addEventListener('click', openChat);
+    $('#btnChatClose').addEventListener('click', closeChat);
+    $('#btnChatClear').addEventListener('click', () => {
+      if (!chat.messages.length) return;
+      if (!confirm('清空这段对话？')) return;
+      chat.messages = [];
+      renderChat();
+    });
+    $('#btnChatScene').addEventListener('click', openScenes);
+    $('#btnSceneClose').addEventListener('click', closeScenes);
+    $('#sceneModal').addEventListener('click', (e) => {
+      if (e.target.id === 'sceneModal') closeScenes();
+    });
+    $('#sceneList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-scene]');
+      if (!b) return;
+      AI.scene = b.dataset.scene;
+      saveAi();
+      chat.messages = [];
+      closeScenes();
+      $('#btnChatScene').textContent = `${aiScene().name} ⌄`;
+      renderChat();
+    });
+    $('#btnChatSend').addEventListener('click', () => {
+      const v = $('#chatInput').value;
+      $('#chatInput').value = '';
+      sendChat(v);
+    });
+    $('#chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = e.target.value;
+        e.target.value = '';
+        sendChat(v);
+      }
+    });
+    $('#btnChatMic').addEventListener('click', chatListen);
+    $('#btnAiSave').addEventListener('click', () => {
+      AI.key = $('#aiKey').value.trim();
+      saveAi();
+      renderAiSettings();
+      toast(AI.key ? 'Key 已保存' : '已清空 Key');
+    });
+
     // 句子库
     $('#btnSentAdd').addEventListener('click', openSentModal);
     $('#btnSentEmptyAdd').addEventListener('click', openSentModal);
@@ -2887,10 +2933,225 @@
   }
 
   /* ---------------------------------------------------------
+     口语搭子（DeepSeek 对话）
+     --------------------------------------------------------- */
+  const AI_LS = 'cihua.ai';
+  let AI = { key: '', scene: 'free' };
+  const chat = { messages: [], busy: false };
+
+  const SCENES = [
+    { id: 'free', name: '自由聊', role: 'You are a warm, curious English-speaking friend.', hint: 'Say hi and tell it what you did today.' },
+    { id: 'order', name: '餐厅点餐', role: 'You are a waiter at a casual restaurant in London. The user is a customer.', hint: 'Try: Hi, a table for two, please.' },
+    { id: 'interview', name: '工作面试', role: 'You are a friendly hiring manager interviewing the user for a marketing job.', hint: 'Try: Thanks for having me. Tell me about the role.' },
+    { id: 'travel', name: '旅行问路', role: 'You are a helpful local in New York. The user is a tourist asking for directions.', hint: 'Try: Excuse me, how do I get to the museum?' },
+    { id: 'beauty', name: '美妆闲聊', role: 'You are a makeup artist chatting with the user while doing their makeup.', hint: 'Try: I have dry skin. What do you recommend?' },
+    { id: 'meeting', name: '工作开会', role: 'You are a colleague in a short daily stand-up at a tech company.', hint: 'Try: I finished the design draft yesterday.' },
+  ];
+
+  function loadAi() {
+    try {
+      AI = Object.assign(AI, JSON.parse(localStorage.getItem(AI_LS) || '{}'));
+    } catch (err) {
+      /* 忽略 */
+    }
+  }
+
+  function saveAi() {
+    try {
+      localStorage.setItem(AI_LS, JSON.stringify(AI));
+    } catch (err) {
+      /* 忽略 */
+    }
+  }
+
+  const aiScene = () => SCENES.find((s) => s.id === AI.scene) || SCENES[0];
+
+  function systemPrompt() {
+    const s = aiScene();
+    return [
+      s.role,
+      'The user is a Chinese learner practicing spoken English. Reply in English only.',
+      'Speak like a real person: one or two short sentences, then a question to keep the conversation going.',
+      'Use everyday words and contractions. No lists, no markdown, no emoji.',
+      "If the user's English has an obvious mistake, add one final line starting with 'Tip:' followed by a fix in Chinese, at most 20 characters.",
+    ].join(' ');
+  }
+
+  function renderAiSettings() {
+    const input = $('#aiKey');
+    if (!input) return;
+    input.value = AI.key || '';
+    const note = $('#aiNote');
+    if (note) {
+      note.textContent = AI.key
+        ? 'Key 已保存，只在本机生效。要换就重新填一次。'
+        : 'Key 只存在这台设备的浏览器里，不会上传到任何地方。到 platform.deepseek.com 注册后创建，按用量计费。';
+    }
+  }
+
+  async function askAI(messages) {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI.key}` },
+      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.8, max_tokens: 220 }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 401) throw new Error('API Key 不对，去「我的 → 口语搭子」检查');
+      if (res.status === 402) throw new Error('DeepSeek 账户余额不足');
+      if (res.status === 429) throw new Error('请求太频繁，歇一下再发');
+      throw new Error(`请求失败 ${res.status} ${text.slice(0, 60)}`);
+    }
+    const data = await res.json();
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+    return (msg && msg.content ? String(msg.content) : '').trim();
+  }
+
+  function renderChat() {
+    const box = $('#chatBody');
+    if (!box) return;
+    box.innerHTML = '';
+    const scene = aiScene();
+
+    if (!chat.messages.length && !chat.busy) {
+      const tip = document.createElement('div');
+      tip.className = 'chat-empty';
+      tip.innerHTML = AI.key
+        ? `<p class="ce-title">${esc(scene.name)}</p><p class="ce-hint">${esc(scene.hint)}</p>`
+        : `<p class="ce-title">还没填 API Key</p><p class="ce-hint">去「我的 → 口语搭子」填一个就能开始聊</p>`;
+      box.appendChild(tip);
+    }
+
+    chat.messages.forEach((m) => {
+      const div = document.createElement('div');
+      div.className = 'bubble ' + (m.role === 'user' ? 'me' : m.role === 'error' ? 'err' : 'ai');
+      if (m.role === 'assistant') {
+        const at = m.content.search(/Tip:/i);
+        if (at >= 0) {
+          div.textContent = m.content.slice(0, at).trim();
+          const tip = document.createElement('span');
+          tip.className = 'tip-line';
+          tip.textContent = 'Tip: ' + m.content.slice(at).replace(/^Tip:\s*/i, '').trim();
+          div.appendChild(tip);
+        } else {
+          div.textContent = m.content;
+        }
+      } else {
+        div.textContent = m.content;
+      }
+      box.appendChild(div);
+    });
+
+    if (chat.busy) {
+      const t = document.createElement('div');
+      t.className = 'bubble ai typing';
+      t.innerHTML = '<i></i><i></i><i></i>';
+      box.appendChild(t);
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function sendChat(raw) {
+    const text = String(raw || '').trim();
+    if (!text || chat.busy) return;
+    if (!AI.key) {
+      toast('先在「我的 → 口语搭子」填 API Key');
+      return;
+    }
+    chat.messages.push({ role: 'user', content: text });
+    chat.busy = true;
+    renderChat();
+    try {
+      const payload = [{ role: 'system', content: systemPrompt() }, ...chat.messages.slice(-12)];
+      const reply = await askAI(payload);
+      chat.busy = false;
+      if (!reply) throw new Error('AI 没有返回内容，再试一次');
+      chat.messages.push({ role: 'assistant', content: reply });
+      renderChat();
+      if (DATA.settings.autoSpeak !== false) {
+        const spoken = reply.replace(/Tip:[\s\S]*$/i, '').trim();
+        speak(spoken || reply, { rate: 0.95 });
+      }
+    } catch (err) {
+      chat.busy = false;
+      chat.messages.push({ role: 'error', content: String(err.message || '出错了') });
+      renderChat();
+    }
+  }
+
+  function chatListen() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      toast('这个浏览器不支持语音识别');
+      return;
+    }
+    const btn = $('#btnChatMic');
+    const r = new SR();
+    r.lang = 'en-US';
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    if (btn) btn.classList.add('listening');
+    const stop = () => btn && btn.classList.remove('listening');
+    r.onresult = (e) => {
+      stop();
+      const t = String(e.results[0][0].transcript || '').trim();
+      if (t) {
+        $('#chatInput').value = t;
+        sendChat(t);
+        $('#chatInput').value = '';
+      }
+    };
+    r.onerror = (e) => {
+      stop();
+      if (e.error !== 'aborted') toast('没听清，再说一次');
+    };
+    r.onend = stop;
+    try {
+      r.start();
+    } catch (err) {
+      stop();
+      toast('语音识别启动失败');
+    }
+  }
+
+  function openChat() {
+    $('#chatStudy').hidden = false;
+    $('#btnChatScene').textContent = `${aiScene().name} ⌄`;
+    document.body.classList.add('lock');
+    renderChat();
+    setTimeout(() => {
+      const input = $('#chatInput');
+      if (input) input.focus();
+    }, 220);
+  }
+
+  function closeChat() {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    $('#chatStudy').hidden = true;
+    document.body.classList.remove('lock');
+  }
+
+  function openScenes() {
+    const box = $('#sceneList');
+    box.innerHTML = SCENES.map(
+      (s) => `<button class="scene-item ${s.id === AI.scene ? 'is-active' : ''}" data-scene="${s.id}">
+        <span>${esc(s.name)}</span>${s.id === AI.scene ? '<b>✓</b>' : ''}</button>`
+    ).join('');
+    $('#sceneModal').hidden = false;
+    document.body.classList.add('lock');
+  }
+
+  function closeScenes() {
+    $('#sceneModal').hidden = true;
+    if ($('#chatStudy').hidden) document.body.classList.remove('lock');
+  }
+
+  /* ---------------------------------------------------------
      启动
      --------------------------------------------------------- */
   load();
   loadSync();
+  loadAi();
   bind();
   renderAll();
   startReminderLoop();
