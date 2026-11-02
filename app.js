@@ -2940,12 +2940,122 @@
   const chat = { messages: [], busy: false };
 
   const SCENES = [
-    { id: 'free', name: '自由聊', role: 'You are a warm, curious English-speaking friend.', hint: 'Say hi and tell it what you did today.' },
-    { id: 'order', name: '餐厅点餐', role: 'You are a waiter at a casual restaurant in London. The user is a customer.', hint: 'Try: Hi, a table for two, please.' },
-    { id: 'interview', name: '工作面试', role: 'You are a friendly hiring manager interviewing the user for a marketing job.', hint: 'Try: Thanks for having me. Tell me about the role.' },
-    { id: 'travel', name: '旅行问路', role: 'You are a helpful local in New York. The user is a tourist asking for directions.', hint: 'Try: Excuse me, how do I get to the museum?' },
-    { id: 'beauty', name: '美妆闲聊', role: 'You are a makeup artist chatting with the user while doing their makeup.', hint: 'Try: I have dry skin. What do you recommend?' },
-    { id: 'meeting', name: '工作开会', role: 'You are a colleague in a short daily stand-up at a tech company.', hint: 'Try: I finished the design draft yesterday.' },
+    // 有事想聊：像朋友一样听你说
+    {
+      id: 'vent',
+      group: 'talk',
+      name: '有烦心事',
+      role: 'You are a warm, patient friend. The user is telling you about something that has been bothering them. Listen first, react like a real friend, and ask one gentle follow-up question. Do not give advice unless they ask for it.',
+      hint: 'Try: I had a really rough day today.',
+    },
+    {
+      id: 'stress',
+      group: 'talk',
+      name: '压力大',
+      role: 'You are an understanding friend. The user feels overwhelmed by work or study. Acknowledge how they feel, share a small thought of your own, and ask what is weighing on them most. No lectures, no lists of tips.',
+      hint: 'Try: I feel like I am falling behind at work.',
+    },
+    {
+      id: 'conflict',
+      group: 'talk',
+      name: '和人闹矛盾',
+      role: 'You are a good friend listening to the user talk about a conflict with someone close to them. Try to understand both sides, ask what was said, and stay neutral and kind.',
+      hint: 'Try: My friend got really angry with me yesterday.',
+    },
+    {
+      id: 'decision',
+      group: 'talk',
+      name: '犹豫做决定',
+      role: 'You are a thoughtful friend. The user is torn between two options. Ask questions that help them think out loud, and reflect back what you hear. Do not decide for them.',
+      hint: 'Try: I cannot decide whether to take this new job.',
+    },
+    {
+      id: 'goodnews',
+      group: 'talk',
+      name: '分享好消息',
+      role: 'You are an excited friend. The user has good news. Celebrate with them, ask for details, and keep it lively.',
+      hint: 'Try: Guess what? I finally passed my exam!',
+    },
+
+    // 日常闲聊
+    {
+      id: 'free',
+      group: 'daily',
+      name: '随便聊聊',
+      role: 'You are a warm, curious English-speaking friend.',
+      hint: 'Say hi and tell it what you did today.',
+    },
+    {
+      id: 'weekend',
+      group: 'daily',
+      name: '周末计划',
+      role: 'You are a friend chatting about weekend plans.',
+      hint: 'Try: I have no plans yet. What should I do?',
+    },
+    {
+      id: 'food',
+      group: 'daily',
+      name: '吃饭做饭',
+      role: 'You are a friend who loves food, chatting about what to eat and how to cook it.',
+      hint: 'Try: I want to cook something simple tonight.',
+    },
+    {
+      id: 'show',
+      group: 'daily',
+      name: '追剧看电影',
+      role: 'You are a friend who watches a lot of shows and movies. Chat about what the user is watching.',
+      hint: 'Try: I just finished a really good series.',
+    },
+    {
+      id: 'sport',
+      group: 'daily',
+      name: '运动健身',
+      role: 'You are a friendly gym buddy talking about exercise and staying fit.',
+      hint: 'Try: I want to start running but I get tired fast.',
+    },
+
+    // 场景练习
+    {
+      id: 'order',
+      group: 'role',
+      name: '餐厅点餐',
+      role: 'You are a waiter at a casual restaurant in London. The user is a customer.',
+      hint: 'Try: Hi, a table for two, please.',
+    },
+    {
+      id: 'interview',
+      group: 'role',
+      name: '工作面试',
+      role: 'You are a friendly hiring manager interviewing the user for a marketing job.',
+      hint: 'Try: Thanks for having me. Tell me about the role.',
+    },
+    {
+      id: 'travel',
+      group: 'role',
+      name: '旅行问路',
+      role: 'You are a helpful local in New York. The user is a tourist asking for directions.',
+      hint: 'Try: Excuse me, how do I get to the museum?',
+    },
+    {
+      id: 'beauty',
+      group: 'role',
+      name: '美妆闲聊',
+      role: 'You are a makeup artist chatting with the user while doing their makeup.',
+      hint: 'Try: I have dry skin. What do you recommend?',
+    },
+    {
+      id: 'meeting',
+      group: 'role',
+      name: '工作开会',
+      role: 'You are a colleague in a short daily stand-up at a tech company.',
+      hint: 'Try: I finished the design draft yesterday.',
+    },
+  ];
+
+  const SCENE_GROUPS = [
+    { id: 'talk', name: '有事想聊' },
+    { id: 'daily', name: '日常闲聊' },
+    { id: 'role', name: '场景练习' },
   ];
 
   function loadAi() {
@@ -2968,13 +3078,23 @@
 
   function systemPrompt() {
     const s = aiScene();
-    return [
+    const base = [
       s.role,
       'The user is a Chinese learner practicing spoken English. Reply in English only.',
       'Speak like a real person: one or two short sentences, then a question to keep the conversation going.',
       'Use everyday words and contractions. No lists, no markdown, no emoji.',
-      "If the user's English has an obvious mistake, add one final line starting with 'Tip:' followed by a fix in Chinese, at most 20 characters.",
-    ].join(' ');
+    ];
+    if (s.group === 'talk') {
+      base.push('Be emotionally warm: react to the feeling first, then ask one gentle question. Never lecture, never list advice.');
+      base.push(
+        "Only if the user's English has a clear grammar mistake, add one final line starting with 'Tip:' followed by a fix in Chinese, at most 20 characters. Otherwise say nothing about grammar."
+      );
+    } else {
+      base.push(
+        "If the user's English has an obvious mistake, add one final line starting with 'Tip:' followed by a fix in Chinese, at most 20 characters."
+      );
+    }
+    return base.join(' ');
   }
 
   function renderAiSettings() {
@@ -3201,10 +3321,17 @@
 
   function openScenes() {
     const box = $('#sceneList');
-    box.innerHTML = SCENES.map(
-      (s) => `<button class="scene-item ${s.id === AI.scene ? 'is-active' : ''}" data-scene="${s.id}">
-        <span>${esc(s.name)}</span>${s.id === AI.scene ? '<b>✓</b>' : ''}</button>`
-    ).join('');
+    box.innerHTML = SCENE_GROUPS.map((g) => {
+      const items = SCENES.filter((s) => s.group === g.id);
+      if (!items.length) return '';
+      const list = items
+        .map(
+          (s) => `<button class="scene-item ${s.id === AI.scene ? 'is-active' : ''}" data-scene="${s.id}">
+            <span>${esc(s.name)}</span>${s.id === AI.scene ? '<b>✓</b>' : ''}</button>`
+        )
+        .join('');
+      return `<p class="scene-group">${esc(g.name)}</p>${list}`;
+    }).join('');
     $('#sceneModal').hidden = false;
     document.body.classList.add('lock');
   }
@@ -3217,7 +3344,7 @@
   /* ---------------------------------------------------------
      启动
      --------------------------------------------------------- */
-  const BUILD = 'v1.3 · 11.02';
+  const BUILD = 'v1.4 · 11.02';
   const tag = $('#buildTag');
   if (tag) tag.textContent = BUILD;
 

@@ -2202,6 +2202,15 @@ svg { display: block; }
   padding-bottom: 8px;
 }
 
+.scene-group {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: var(--ink-3);
+}
+
+.scene-group:first-child { margin-top: 4px; }
+
 .scene-item {
   display: flex;
   align-items: center;
