@@ -249,6 +249,31 @@
     <p class="foot">词话 v1.0 · 一个只做「背单词 + 练口语」的小应用<br />建议在手机浏览器里「添加到主屏幕」使用</p>
   </section>
 
+  <!-- ==================== 句子 ==================== -->
+  <section class="view" id="view-sentences" hidden>
+    <header class="page-head">
+      <h1>句子</h1>
+      <p id="sentCount">共 0 句</p>
+    </header>
+
+    <div class="sent-actions">
+      <button class="alt-btn" id="btnSentAdd">＋ 添加句子</button>
+      <button class="alt-btn" id="btnVideoMode">🎬 视频跟读</button>
+    </div>
+
+    <div class="chips" id="sentFilters">
+      <button class="chip is-active" data-filter="all">全部</button>
+      <button class="chip" data-filter="fav">⭐ 收藏</button>
+    </div>
+
+    <ul class="sent-list" id="sentList"></ul>
+    <div class="empty" id="sentEmpty" hidden>
+      <p class="empty-emoji">✍️</p>
+      <p>收藏你想练的句子。<br />可以粘贴，也可以拍照识别。</p>
+      <button class="ghost-btn" id="btnSentEmptyAdd">添加第一句</button>
+    </div>
+  </section>
+
   <!-- ==================== 底部导航 ==================== -->
   <nav class="tabbar" id="tabbar">
     <button class="tab is-active" data-tab="today">
@@ -258,6 +283,10 @@
     <button class="tab" data-tab="library">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4z" /><path d="M9 8h6M9 12h4" /></svg>
       <span>词库</span>
+    </button>
+    <button class="tab" data-tab="sentences">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h11" /><path d="M4 16h7" /><path d="M17 15l3 3-3 3" /></svg>
+      <span>句子</span>
     </button>
     <button class="tab" data-tab="me">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" /></svg>
@@ -287,6 +316,74 @@
   </div>
   <div class="speak-bar" id="speakBar" hidden>
     <button class="primary-btn" id="btnSpeakNext">下一个 →</button>
+  </div>
+</div>
+
+<!-- ==================== 句子跟读全屏 ==================== -->
+<div class="study" id="sentStudy" hidden>
+  <div class="study-top">
+    <button class="icon-btn" id="btnSentClose" aria-label="退出">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+    <div class="progress"><i id="sentProgressFill"></i></div>
+    <span class="progress-num" id="sentNum">1/1</span>
+  </div>
+  <div class="study-body" id="sentBody"></div>
+  <div class="speak-bar" id="sentNav" hidden>
+    <div class="sent-nav-row">
+      <button class="ghost-btn" id="btnSentPrev">← 上一句</button>
+      <button class="primary-btn" id="btnSentNext">下一句 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 视频跟读全屏 ==================== -->
+<div class="study" id="videoStudy" hidden>
+  <div class="study-top">
+    <button class="icon-btn" id="btnVideoClose" aria-label="退出">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+    <div class="progress"><i id="vidProgressFill"></i></div>
+    <span class="progress-num" id="vidTime">0:00</span>
+  </div>
+  <div class="study-body" id="videoBody"></div>
+</div>
+
+<!-- ==================== 添加句子 ==================== -->
+<div class="sheet-mask" id="sentModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <h2>添加句子</h2>
+      <button class="icon-btn" id="btnSentModalClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+
+    <div class="seg" id="sentSeg">
+      <button class="is-active" data-mode="paste">粘贴</button>
+      <button data-mode="photo">拍照识别</button>
+    </div>
+
+    <form id="sentFormPaste" class="form">
+      <label class="field">
+        <span>每行一句，会逐行拆开</span>
+        <textarea id="sentText" rows="6" placeholder="I'd like to make a reservation for two.&#10;Could you speak a little slower?"></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary-btn">加入句子库</button>
+      </div>
+    </form>
+
+    <div id="sentPhoto" class="form" hidden>
+      <input type="file" id="sentPhotoInput" accept="image/*" hidden />
+      <button type="button" class="ghost-btn" id="btnPickPhoto">选择照片 / 拍照</button>
+      <p class="form-note" id="ocrStatus">选一张带英文的照片，识别后可修改再保存。</p>
+      <textarea id="sentOcrText" rows="6" placeholder="识别结果会出现在这里"></textarea>
+      <div class="form-actions">
+        <button type="button" class="primary-btn" id="btnOcrAdd">把识别到的句子加进去</button>
+      </div>
+    </div>
   </div>
 </div>
 

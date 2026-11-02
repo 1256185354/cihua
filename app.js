@@ -32,6 +32,8 @@
     mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>',
     play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.8h5V7"/><path d="M6.5 7l.9 12.2h9.2L17.5 7"/></svg>',
+    star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>',
+    starOn: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>',
   };
 
   /* ---------------------------------------------------------
@@ -117,13 +119,14 @@
       DATA = null;
     }
     if (!DATA || !Array.isArray(DATA.words)) {
-      DATA = { version: 1, words: [], logs: {}, settings: { ...DEFAULT_SETTINGS } };
+      DATA = { version: 1, words: [], logs: {}, sentences: [], settings: { ...DEFAULT_SETTINGS } };
       DATA.words = [];
       seedDemo();
       save();
     }
     DATA.logs = DATA.logs || {};
     DATA.deleted = Array.isArray(DATA.deleted) ? DATA.deleted : [];
+    DATA.sentences = Array.isArray(DATA.sentences) ? DATA.sentences : [];
     DATA.settings = Object.assign({}, DEFAULT_SETTINGS, DATA.settings || {});
     DATA.words = DATA.words.map(makeWord);
   }
@@ -537,6 +540,7 @@
   function renderAll() {
     renderToday();
     renderLibrary();
+    renderSentences();
     renderMe();
   }
 
@@ -605,8 +609,15 @@
      --------------------------------------------------------- */
   const rec = { mr: null, stream: null, chunks: [], url: null, blob: null, timer: null, auto: null, startedAt: 0 };
 
+  // 录音控件可以被不同的全屏页复用（生词卡 / 句子 / 视频）
+  const REC_UI_DEFAULT = { record: '#btnRecord', play: '#btnPlayMine', status: '#recStatus' };
+  let recUI = Object.assign({}, REC_UI_DEFAULT);
+  function useRecUI(ids) {
+    recUI = Object.assign({}, REC_UI_DEFAULT, ids || {});
+  }
+
   function setRecStatus(text, isRec) {
-    const el = $('#recStatus');
+    const el = $(recUI.status);
     if (!el) return;
     el.textContent = text;
     el.classList.toggle('rec', !!isRec);
@@ -652,14 +663,14 @@
       rec.blob = blob;
       rec.url = URL.createObjectURL(blob);
       rec.mr = null;
-      const btn = $('#btnPlayMine');
-      if (btn) btn.disabled = false;
+      const btn2 = $(recUI.play);
+      if (btn2) btn2.disabled = false;
       setRecStatus('录好了，点「我的」听听', false);
       stopStream();
       clearInterval(rec.timer);
       rec.timer = null;
       clearTimeout(rec.auto);
-      const rb = $('#btnRecord');
+      const rb = $(recUI.record);
       if (rb) {
         rb.classList.remove('is-rec');
         rb.innerHTML = ICON.mic;
@@ -668,7 +679,7 @@
 
     mr.start();
     rec.startedAt = Date.now();
-    const rb = $('#btnRecord');
+    const rb = $(recUI.record);
     if (rb) {
       rb.classList.add('is-rec');
       rb.innerHTML = '<span class="rec-stop"></span>';
@@ -716,7 +727,7 @@
     rec.blob = null;
     rec.chunks = [];
     rec.mr = null;
-    const btn = $('#btnPlayMine');
+    const btn = $(recUI.play);
     if (btn) btn.disabled = true;
   }
 
@@ -792,14 +803,19 @@
     return { score: t.length ? hit / t.length : 0, missing };
   }
 
+  // 评测的目标文本 & 结果显示位置，可被句子/视频页临时覆盖
+  let assessText = '';
+  let assessSel = '#assessBox';
+
   function assessTarget() {
+    if (assessText) return assessText;
     const w = session.word;
     if (!w) return '';
     return session.mode === 'speak' ? shadowText(w) : w.term;
   }
 
   function setAssess(html, tone) {
-    const box = $('#assessBox');
+    const box = $(assessSel);
     if (!box) return;
     box.hidden = false;
     box.className = 'assess' + (tone ? ' ' + tone : '');
@@ -1838,7 +1854,7 @@
       headers: Object.assign(syncHeaders(), { Prefer: 'resolution=merge-duplicates,return=minimal' }),
       body: JSON.stringify({
         id: SYNC.id,
-        value: { words: DATA.words, logs: DATA.logs, deleted: DATA.deleted },
+        value: { words: DATA.words, sentences: DATA.sentences || [], logs: DATA.logs, deleted: DATA.deleted },
         updated_at: new Date().toISOString(),
       }),
     });
@@ -1848,7 +1864,12 @@
   /* 合并：同 id 取较新的；删除用墓碑，避免「删了又回来」；打卡记录取最大值 */
   function mergeRemote(remote) {
     if (!remote || !Array.isArray(remote.words)) {
-      return { words: DATA.words, logs: DATA.logs, deleted: DATA.deleted || [] };
+      return {
+        words: DATA.words,
+        sentences: DATA.sentences || [],
+        logs: DATA.logs,
+        deleted: DATA.deleted || [],
+      };
     }
     const tomb = new Map();
     [...(DATA.deleted || []), ...(remote.deleted || [])].forEach((d) => {
@@ -1914,7 +1935,26 @@
       .sort((a, b) => a.at - b.at)
       .slice(-500);
 
-    return { words: unique, logs, deleted };
+    // 句子：同 id 取较新的，再按文本去重
+    const sentById = new Map();
+    const addSent = (s) => {
+      if (!s || !s.id) return;
+      const cur = sentById.get(s.id);
+      if (!cur || (Number(s.updatedAt) || 0) > (Number(cur.updatedAt) || 0)) sentById.set(s.id, s);
+    };
+    (DATA.sentences || []).forEach(addSent);
+    (remote.sentences || []).forEach(addSent);
+    const sentSeen = new Set();
+    const sentences = Array.from(sentById.values()).filter((s) => {
+      const t = String(s.text || '').toLowerCase().trim();
+      if (t) {
+        if (sentSeen.has(t)) return false;
+        sentSeen.add(t);
+      }
+      return true;
+    });
+
+    return { words: unique, sentences, logs, deleted };
   }
 
   async function syncNow(opts = {}) {
@@ -1930,6 +1970,7 @@
       const remote = await syncPull();
       const merged = mergeRemote(remote);
       DATA.words = merged.words.map(makeWord);
+      DATA.sentences = merged.sentences || DATA.sentences || [];
       DATA.logs = merged.logs;
       DATA.deleted = merged.deleted;
       save();
@@ -2067,6 +2108,7 @@
     $('#btnLibAdd').hidden = tab !== 'library';
     if (tab === 'today') renderToday();
     if (tab === 'library') renderLibrary();
+    if (tab === 'sentences') renderSentences();
     if (tab === 'me') renderMe();
     window.scrollTo({ top: 0 });
   }
@@ -2314,6 +2356,87 @@
       location.reload();
     });
 
+    // 句子库
+    $('#btnSentAdd').addEventListener('click', openSentModal);
+    $('#btnSentEmptyAdd').addEventListener('click', openSentModal);
+    $('#btnVideoMode').addEventListener('click', openVideo);
+
+    $('#sentList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-act]');
+      const li = e.target.closest('.sent-item');
+      if (!btn || !li) return;
+      const s = sentById(li.dataset.id);
+      if (!s) return;
+      if (btn.dataset.act === 'open') openSentPractice(s.id);
+      if (btn.dataset.act === 'fav') {
+        s.fav = !s.fav;
+        s.updatedAt = Date.now();
+        save();
+        renderSentences();
+      }
+    });
+
+    $('#sentFilters').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      sentState.filter = chip.dataset.filter;
+      $$('#sentFilters .chip').forEach((c) => c.classList.toggle('is-active', c === chip));
+      renderSentences();
+    });
+
+    // 句子跟读
+    $('#btnSentClose').addEventListener('click', closeSentPractice);
+    $('#btnSentPrev').addEventListener('click', () => stepSentence(-1));
+    $('#btnSentNext').addEventListener('click', () => stepSentence(1));
+
+    // 视频跟读
+    $('#btnVideoClose').addEventListener('click', closeVideo);
+
+    // 添加句子弹层
+    $('#btnSentModalClose').addEventListener('click', closeSentModal);
+    $('#sentModal').addEventListener('click', (e) => {
+      if (e.target.id === 'sentModal') closeSentModal();
+    });
+    $('#sentSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mode]');
+      if (!b) return;
+      $$('#sentSeg button').forEach((x) => x.classList.toggle('is-active', x === b));
+      $('#sentFormPaste').hidden = b.dataset.mode !== 'paste';
+      $('#sentPhoto').hidden = b.dataset.mode !== 'photo';
+    });
+    $('#sentFormPaste').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const lines = splitLines($('#sentText').value);
+      if (!lines.length) {
+        toast('先粘几句进来');
+        return;
+      }
+      const n = addSentences(lines);
+      toast(n ? `已加入 ${n} 句` : '这些句子已经在库里了');
+      if (n) closeSentModal();
+    });
+    $('#btnPickPhoto').addEventListener('click', () => $('#sentPhotoInput').click());
+    $('#sentPhotoInput').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      try {
+        await ocrImage(f);
+      } catch (err) {
+        setOcrStatus(`识别失败：${err.message || '网络问题'}。可以直接把文字粘贴进来保存。`);
+      }
+    });
+    $('#btnOcrAdd').addEventListener('click', () => {
+      const lines = splitLines($('#sentOcrText').value);
+      if (!lines.length) {
+        toast('还没有识别结果');
+        return;
+      }
+      const n = addSentences(lines, '拍照');
+      toast(n ? `已加入 ${n} 句` : '这些句子已经在库里了');
+      if (n) closeSentModal();
+    });
+
     // 键盘：学习时按 1/2/3 评分
     document.addEventListener('keydown', (e) => {
       if ($('#study').hidden) return;
@@ -2327,6 +2450,427 @@
       }
       if (['0', '1', '2'].includes(e.key)) grade(Number(e.key));
     });
+  }
+
+  /* ---------------------------------------------------------
+     句子库（收藏 + 跟读）
+     --------------------------------------------------------- */
+  const sentences = () => DATA.sentences || [];
+  const sentById = (id) => sentences().find((s) => s.id === id);
+  const sentState = { filter: 'all' };
+  const sentPractice = { list: [], idx: 0, rate: 0.85 };
+
+  function splitLines(text) {
+    return String(text || '')
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+  }
+
+  function addSentences(lines, source) {
+    const exist = new Set(sentences().map((s) => s.text.toLowerCase()));
+    let added = 0;
+    lines.forEach((text) => {
+      const key = text.toLowerCase();
+      if (exist.has(key)) return;
+      exist.add(key);
+      DATA.sentences.push({
+        id: uid(),
+        text,
+        zh: '',
+        source: source || '',
+        fav: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      added++;
+    });
+    if (added) {
+      save();
+      renderSentences();
+    }
+    return added;
+  }
+
+  function sentSorted() {
+    let list = sentences().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (sentState.filter === 'fav') list = list.filter((s) => s.fav);
+    return list;
+  }
+
+  function renderSentences() {
+    const box = $('#sentList');
+    if (!box) return;
+    const list = sentSorted();
+    const favs = sentences().filter((s) => s.fav).length;
+    $('#sentCount').textContent = sentences().length
+      ? `共 ${sentences().length} 句 · 收藏 ${favs} 句`
+      : '还没有句子';
+    box.innerHTML = list
+      .map(
+        (s) => `<li class="sent-item" data-id="${s.id}">
+          <button class="sent-main" data-act="open">
+            <span class="sent-text">${esc(s.text)}</span>
+            ${s.zh ? `<span class="sent-zh">${esc(s.zh)}</span>` : ''}
+            ${s.source ? `<span class="sent-meta">${esc(s.source)}</span>` : ''}
+          </button>
+          <button class="wi-btn ${s.fav ? 'saved' : ''}" data-act="fav" aria-label="收藏">${
+          s.fav ? ICON.starOn : ICON.star
+        }</button>
+        </li>`
+      )
+      .join('');
+    $('#sentEmpty').hidden = list.length > 0;
+  }
+
+  /* ---------- 句子跟读 ---------- */
+  function openSentPractice(id) {
+    const list = sentSorted();
+    if (!list.length) {
+      toast('还没有句子');
+      return;
+    }
+    const idx = Math.max(0, list.findIndex((s) => s.id === id));
+    sentPractice.list = list;
+    sentPractice.idx = idx;
+    useRecUI({ record: '#sBtnRecord', play: '#sBtnPlayMine', status: '#sRecStatus' });
+    assessSel = '#sAssessBox';
+    assessText = '';
+    resetRecording();
+    $('#sentStudy').hidden = false;
+    $('#sentNav').hidden = false;
+    document.body.classList.add('lock');
+    renderSentCard();
+  }
+
+  function closeSentPractice() {
+    resetRecording();
+    useRecUI(null);
+    assessSel = '#assessBox';
+    assessText = '';
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    $('#sentStudy').hidden = true;
+    $('#sentNav').hidden = true;
+    document.body.classList.remove('lock');
+    renderSentences();
+  }
+
+  function renderSentCard() {
+    const s = sentPractice.list[sentPractice.idx];
+    if (!s) {
+      closeSentPractice();
+      return;
+    }
+    const slow = sentPractice.rate < 1;
+    assessText = s.text;
+
+    $('#sentBody').innerHTML = `
+      <div class="wordcard sent-card">
+        <div class="wc-top">
+          <p class="wc-tag">句子</p>
+          <button class="speak-btn" id="sBtnSpeak" aria-label="朗读句子">${ICON.speaker}</button>
+        </div>
+        <p class="sent-big">${esc(s.text)}</p>
+        ${s.zh ? `<p class="sent-zh-big">${esc(s.zh)}</p>` : ''}
+        <div class="sent-speed">
+          <button class="chip ${slow ? 'is-active' : ''}" data-rate="0.7">慢速 0.7×</button>
+          <button class="chip ${slow ? '' : 'is-active'}" data-rate="1">正常 1×</button>
+        </div>
+      </div>
+
+      <div class="shadow-box">
+        <div class="shadow-head">
+          <p class="shadow-title">跟读</p>
+          <span class="shadow-status" id="sRecStatus">点麦克风开录</span>
+        </div>
+        <div class="rec-wrap">
+          <button class="rec-btn" id="sBtnRecord" aria-label="开始录音">${ICON.mic}</button>
+        </div>
+        <div class="pill-row">
+          <button class="pill" id="sBtnPlayMine" disabled>${ICON.play}我的</button>
+          <button class="pill" id="sBtnPlayOrig">${ICON.play}原音</button>
+          <button class="pill accent" id="sBtnAssess">🎧 评测</button>
+        </div>
+        <div class="assess" id="sAssessBox" hidden></div>
+      </div>
+    `;
+
+    $('#sentNum').textContent = `${sentPractice.idx + 1}/${sentPractice.list.length}`;
+    $('#sentProgressFill').style.width = `${((sentPractice.idx + 1) / sentPractice.list.length) * 100}%`;
+
+    const play = () => speak(s.text, { rate: sentPractice.rate });
+    $('#sBtnSpeak').addEventListener('click', play);
+    $('#sBtnPlayOrig').addEventListener('click', play);
+    $('#sBtnPlayMine').addEventListener('click', playMine);
+    $('#sBtnRecord').addEventListener('click', toggleRecord);
+    $('#sBtnAssess').addEventListener('click', startAssess);
+    $('#sentBody')
+      .querySelectorAll('.sent-speed .chip')
+      .forEach((chip) => {
+        chip.addEventListener('click', () => {
+          sentPractice.rate = Number(chip.dataset.rate) || 1;
+          $('#sentBody').querySelectorAll('.sent-speed .chip').forEach((c) => c.classList.toggle('is-active', c === chip));
+          play();
+        });
+      });
+  }
+
+  function stepSentence(delta) {
+    const next = sentPractice.idx + delta;
+    if (next < 0 || next >= sentPractice.list.length) {
+      toast(delta > 0 ? '已经是最后一句' : '已经是第一句');
+      return;
+    }
+    resetRecording();
+    sentPractice.idx = next;
+    renderSentCard();
+  }
+
+  /* ---------- 视频 / 音频跟读 ---------- */
+  const vid = { url: null, file: null, a: null, b: null, rate: 0.7, loop: false, raf: 0 };
+
+  function openVideo() {
+    useRecUI({ record: '#vBtnRecord', play: '#vBtnPlayMine', status: '#vRecStatus' });
+    assessSel = '#vAssessBox';
+    resetRecording();
+    $('#videoStudy').hidden = false;
+    document.body.classList.add('lock');
+    renderVideo();
+  }
+
+  function closeVideo() {
+    stopVideoLoop();
+    const el = $('#vidEl');
+    if (el) el.pause();
+    if (vid.url) {
+      URL.revokeObjectURL(vid.url);
+      vid.url = null;
+      vid.file = null;
+      vid.a = null;
+      vid.b = null;
+      vid.loop = false;
+    }
+    resetRecording();
+    useRecUI(null);
+    assessSel = '#assessBox';
+    $('#videoStudy').hidden = true;
+    document.body.classList.remove('lock');
+  }
+
+  function stopVideoLoop() {
+    if (vid.raf) cancelAnimationFrame(vid.raf);
+    vid.raf = 0;
+  }
+
+  function renderVideo() {
+    $('#videoBody').innerHTML = `
+      <div class="video-panel">
+        <video id="vidEl" playsinline webkit-playsinline preload="metadata"></video>
+        <div class="video-empty" id="vidEmpty">
+          <p>选一段演讲视频或音频</p>
+          <p class="video-tip">用手机之前下载好的文件；建议戴耳机，避免录音串音</p>
+          <button class="ghost-btn" id="btnVidPick">选择文件</button>
+        </div>
+      </div>
+
+      <div class="shadow-box">
+        <div class="seg small" id="vidSpeed">
+          <button data-rate="0.5">0.5×</button>
+          <button data-rate="0.7" class="is-active">0.7×</button>
+          <button data-rate="1">1×</button>
+        </div>
+        <div class="pill-row">
+          <button class="pill" id="btnVidA">A 起点</button>
+          <button class="pill" id="btnVidB">B 终点</button>
+          <button class="pill" id="btnVidClear">清除</button>
+        </div>
+        <p class="video-mark" id="vidMark">还没设循环区间</p>
+
+        <div class="shadow-head">
+          <p class="shadow-title">跟读</p>
+          <span class="shadow-status" id="vRecStatus">点麦克风开录</span>
+        </div>
+        <div class="rec-wrap">
+          <button class="rec-btn" id="vBtnRecord" aria-label="开始录音">${ICON.mic}</button>
+        </div>
+        <div class="pill-row pill-row-2">
+          <button class="pill" id="vBtnPlayMine" disabled>${ICON.play}我的</button>
+          <button class="pill" id="vBtnPlayOrig">${ICON.play}播放/暂停</button>
+        </div>
+        <div class="assess" id="vAssessBox" hidden></div>
+      </div>
+    `;
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'video/*,audio/*';
+    fileInput.hidden = true;
+    document.body.appendChild(fileInput);
+
+    const pick = () => fileInput.click();
+    $('#btnVidPick').addEventListener('click', pick);
+
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (vid.url) URL.revokeObjectURL(vid.url);
+      vid.file = f;
+      vid.url = URL.createObjectURL(f);
+      const el = $('#vidEl');
+      el.src = vid.url;
+      el.playbackRate = vid.rate;
+      $('#vidEmpty').hidden = true;
+      el.controls = true;
+      el.addEventListener('loadedmetadata', () => {
+        updateVidTime();
+        el.play().catch(() => {});
+      });
+      el.addEventListener('timeupdate', updateVidTime);
+    });
+
+    $('#vBtnPlayOrig').addEventListener('click', () => {
+      const el = $('#vidEl');
+      if (!el.src) {
+        pick();
+        return;
+      }
+      if (el.paused) el.play().catch(() => {});
+      else el.pause();
+    });
+
+    $('#vBtnPlayMine').addEventListener('click', playMine);
+    $('#vBtnRecord').addEventListener('click', toggleRecord);
+
+    $('#vidSpeed')
+      .querySelectorAll('button')
+      .forEach((b) => {
+        b.addEventListener('click', () => {
+          vid.rate = Number(b.dataset.rate) || 1;
+          $('#vidSpeed').querySelectorAll('button').forEach((x) => x.classList.toggle('is-active', x === b));
+          const el = $('#vidEl');
+          if (el) el.playbackRate = vid.rate;
+        });
+      });
+
+    $('#btnVidA').addEventListener('click', () => {
+      const el = $('#vidEl');
+      if (!el.src) return;
+      vid.a = el.currentTime;
+      updateVidMark();
+    });
+    $('#btnVidB').addEventListener('click', () => {
+      const el = $('#vidEl');
+      if (!el.src) return;
+      vid.b = el.currentTime;
+      if (vid.a != null && vid.b != null && vid.b <= vid.a) {
+        toast('B 点要在 A 点之后');
+        vid.b = null;
+      }
+      updateVidMark();
+      startVideoLoop();
+    });
+    $('#btnVidClear').addEventListener('click', () => {
+      vid.a = null;
+      vid.b = null;
+      vid.loop = false;
+      stopVideoLoop();
+      updateVidMark();
+    });
+  }
+
+  function fmtTime(t) {
+    const s = Math.max(0, Math.floor(t || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function updateVidTime() {
+    const el = $('#vidEl');
+    if (!el) return;
+    const num = $('#vidTime');
+    if (num) num.textContent = fmtTime(el.currentTime);
+    const bar = $('#vidProgressFill');
+    if (bar && el.duration) bar.style.width = `${(el.currentTime / el.duration) * 100}%`;
+  }
+
+  function updateVidMark() {
+    const el = $('#vidMark');
+    if (!el) return;
+    if (vid.a == null && vid.b == null) {
+      el.textContent = '还没设循环区间';
+    } else {
+      el.textContent = `A ${vid.a != null ? fmtTime(vid.a) : '—'} · B ${vid.b != null ? fmtTime(vid.b) : '—'}`;
+    }
+  }
+
+  function startVideoLoop() {
+    stopVideoLoop();
+    if (vid.a == null || vid.b == null) return;
+    const el = $('#vidEl');
+    const tick = () => {
+      if (!el || el.paused) {
+        vid.raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (el.currentTime >= vid.b) {
+        el.currentTime = vid.a;
+        el.play().catch(() => {});
+      }
+      vid.raf = requestAnimationFrame(tick);
+    };
+    vid.raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------- 添加句子（粘贴 / 拍照） ---------- */
+  function openSentModal() {
+    $('#sentModal').hidden = false;
+    document.body.classList.add('lock');
+    $('#sentText').value = '';
+    $('#sentOcrText').value = '';
+    setOcrStatus('选一张带英文的照片，识别后可修改再保存。');
+  }
+
+  function closeSentModal() {
+    $('#sentModal').hidden = true;
+    document.body.classList.remove('lock');
+  }
+
+  function setOcrStatus(text) {
+    const el = $('#ocrStatus');
+    if (el) el.textContent = text;
+  }
+
+  async function loadTesseract() {
+    if (window.Tesseract) return window.Tesseract;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('无法加载识别引擎'));
+      document.head.appendChild(s);
+    });
+    if (!window.Tesseract) throw new Error('识别引擎不可用');
+    return window.Tesseract;
+  }
+
+  async function ocrImage(file) {
+    setOcrStatus('正在准备识别引擎…');
+    const T = await loadTesseract();
+    setOcrStatus('识别中，大概需要 5–15 秒…');
+    const result = await T.recognize(file, 'eng', {
+      logger: (m) => {
+        if (m && m.status === 'recognizing text') {
+          setOcrStatus(`识别中… ${Math.round((m.progress || 0) * 100)}%`);
+        }
+      },
+    });
+    const text = String((result && result.data && result.data.text) || '').trim();
+    if (!text) {
+      setOcrStatus('没识别出文字，换一张更清晰的照片');
+      return;
+    }
+    $('#sentOcrText').value = text;
+    setOcrStatus(`识别完成，共 ${text.split(/\n+/).filter(Boolean).length} 行，可修改后保存`);
   }
 
   /* ---------------------------------------------------------
