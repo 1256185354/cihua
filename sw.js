@@ -3,7 +3,7 @@
    - 页面导航：网络优先，只有网络真的失败才用缓存（不再因超时返回旧页面）
    - 静态资源：网络优先，8 秒超时后回落缓存
    - 缓存版本变更时自动清掉旧缓存 */
-const CACHE = 'cihua-v6';
+const CACHE = 'cihua-v7';
 const ASSET_TIMEOUT = 8000;
 const ASSETS = [
   './',
@@ -53,7 +53,8 @@ function networkFirst(req, timeoutMs) {
     };
     const timer = timeoutMs ? setTimeout(() => done(fromCache(req)), timeoutMs) : null;
 
-    fetch(req)
+    // cache: 'reload' 跳过浏览器 HTTP 缓存，否则更新后仍会拿到旧文件
+    fetch(req, { cache: 'reload' })
       .then((res) => {
         if (res && res.ok) {
           const copy = res.clone();
